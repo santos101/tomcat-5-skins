@@ -1,0 +1,7 @@
+---
+- hosts: tomcat-all
+  remote_user: svc_ansible 
+  become: yes
+  become_method: sudo  
+  roles:
+  - tomcat-all

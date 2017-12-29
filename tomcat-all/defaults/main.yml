@@ -1,0 +1,14 @@
+---
+# defaults file for ansible tomcat client
+
+# location of the instant client zip files on the local machine
+vault_file: "{{ playbook_dir }}/roles/tomcat/vars/vault.yml"
+tomcat_files: "{{ playbook_dir }}/roles/tomcat-all/files/tomcat/"
+oracle_files: "{{ playbook_dir }}/roles/tomcat-all/files/oracle/"
+oracle_tns_dst: "/oracli01/app/svc_oracle/product/12.2.0/client/network/admin/"
+oracle_mng_dst: "/oracli01/app/svc_oracle/product/12.2.0/client/network/admin/tool/"
+ssl_files: "{{ playbook_dir }}/roles/tomcat-all/files/ssl/"
+ssl_prod: "{{ ssl_files }}production.p12"
+ssl_ws: "{{ ssl_files }}ws.p12"
+ssl_preprod: "{{ ssl_files }}preproduction.p12"
+ssl_dr: "{{ ssl_files }}dr.p12"

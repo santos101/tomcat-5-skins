@@ -1,0 +1,167 @@
+---
+
+- name: Check if path exists
+  stat: path=/opt/tomcat
+  register: check_path
+
+- name: Install Tomcat archive to server
+  unarchive:
+     src: "{{ tomcat_files }}apache-tomcat-8.5.20.tar.gz"
+     dest: /tmp/
+
+- name: Manual copy
+  command: cp -r /tmp/apache-tomcat-8.5.20/ /opt/{{ item }}
+  with_items:
+  - tomcat
+  - tomcat/tomcat-pc
+  - tomcat/tomcat-bc
+  - tomcat/tomcat-ab
+  - tomcat/tomcat-ag
+  when: check_path.stat.exists == false
+
+- name: Add user "tomcat"
+  user: 
+    name: tomcat 
+    state: present
+
+- name: Copy service files over to /etc/systemd/system/
+  copy:
+    src: "{{ tomcat_files }}{{ item }}"
+    dest: /etc/systemd/system/{{ item }}
+    backup: yes
+    owner: root
+    group: root
+    mode: 0600
+  with_items:
+  - tomcat.service
+  - tomcat-pc.service
+  - tomcat-bc.service
+  - tomcat-ab.service
+  - tomcat-ag.service
+
+- name: Copy server file over to /opt/tomcat/conf
+  copy:
+    src: "{{ tomcat_files }}server.xml"
+    dest: /opt/tomcat/conf/server.xml
+    backup: yes
+    owner: tomcat
+    group: tomcat
+    mode: 0600
+
+- name: Copy server file over to /opt/tomcat/tomcat-*/conf
+  copy:
+    src: "{{ tomcat_files }}{{ item }}.xml"
+    dest: /opt/tomcat/{{ item }}/conf/server.xml
+    backup: yes
+    owner: tomcat
+    group: tomcat
+    mode: 0600
+  with_items:
+  - tomcat-pc
+  - tomcat-bc
+  - tomcat-ab
+  - tomcat-ag
+  
+- name: copy over the p12 file
+  copy:
+    src: "{{ ssl_env }}"
+    dest: /opt/tomcat/conf/
+    backup: yes
+    owner: tomcat
+    group: tomcat
+    mode: 0600
+
+- name: remove the javakeystore
+  file:
+    path: /opt/tomcat/conf/keystore.jks
+    state: absent
+
+- name: Import the vault
+  include_vars: "{{ vault_file }}"
+  no_log: true
+
+- name: Import a pkcs12 keystore with alias
+  java_cert:
+    pkcs12_path: /opt/tomcat/conf/{{ ssl_env | basename }}
+    pkcs12_alias: 1
+    cert_alias: tomcat
+    keystore_path: /opt/tomcat/conf/keystore.jks
+    keystore_pass: "{{ ssl_password }}"
+    pkcs12_password: "{{ ssl_password }}"
+    keystore_create: yes
+    executable: /usr/java/jre/bin/keytool
+    state: present
+
+- name: Change ownership of Tomcat installation
+  file:
+    path: /opt/tomcat/
+    owner: tomcat
+    group: tomcat
+    state: directory
+    recurse: yes
+
+- name: Template the tnsnames.ora to oracle directory
+  template:
+    src: "{{ oracle_files }}tnsnames.ora.j2"
+    dest: "{{ oracle_tns_dst }}tnsnames.ora"
+    backup: yes
+    owner: svc_oracle
+    group: oinstall
+    mode: 0755
+  ignore_errors: yes
+
+- name: Import the vault
+  include_vars: "{{ vault_file }}"
+  no_log: true
+
+- name: Copy mng to oracle directory 
+  template:
+    src: "{{ oracle_files }}{{ item }}.mng.j2"
+    dest: "{{ oracle_mng_dst }}{{ item }}.mng" 
+    backup: yes
+    owner: tomcat
+    group: tomcat
+    mode: 0600
+  with_items:
+  - tomcat-pc
+  - tomcat-bc
+  - tomcat-ab
+  - tomcat-ag
+
+- name: Reload systemd
+  systemd:
+    state: restarted
+    daemon_reload: yes
+    enabled: yes
+    name: "{{ item }}"
+  with_items:
+  - tomcat.service
+  - tomcat-pc.service
+  - tomcat-bc.service
+  - tomcat-ab.service
+  - tomcat-ag.service
+
+- name: Set default firewalld zone to 'drop'
+  command: firewall-cmd --set-default-zone=drop 
+
+- name: Open ports on firewalld 
+  firewalld:
+    port: "{{ item }}/tcp"
+    permanent: yes 
+    state: enabled 
+    immediate: yes
+    zone: drop
+  with_items: 
+  - 8180
+  - 8280
+  - 8380
+  - 8480
+
+- name: Check tomcat started
+  shell: service {{ item }} status
+  with_items:
+  - tomcat
+  - tomcat-pc
+  - tomcat-bc
+  - tomcat-ab
+  - tomcat-ag
